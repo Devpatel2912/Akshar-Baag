@@ -31,6 +31,11 @@ app.get('/', (req, res) => {
     res.json({ message: 'Welcome to Akshar Baag API' });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
+
+// Increased timeout to 10 minutes for high-res image uploads
+server.timeout = 600000;
+server.keepAliveTimeout = 650000;
+server.headersTimeout = 660000;
