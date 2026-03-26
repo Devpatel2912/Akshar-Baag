@@ -36,9 +36,9 @@ exports.createPlant = async (req, res) => {
         console.log('--- Incoming createPlant ---');
         console.log('Body:', req.body);
         console.log('Files count:', req.files ? req.files.length : 0);
-        
+
         const plantData = { ...req.body };
-        
+
         if (req.files && req.files.length > 0) {
             plantData.image_path = req.files[0].path.replace(/\\/g, '/');
             plantData.image_paths = JSON.stringify(req.files.map(f => f.path.replace(/\\/g, '/')));
@@ -62,12 +62,30 @@ exports.updatePlant = async (req, res) => {
         console.log('--- Incoming updatePlant ---');
         console.log('ID:', req.params.id);
         console.log('Body:', req.body);
-        
+
         const plantData = { ...req.body };
-        
+
+        // Handle image updates (New + Remaining Existing)
+        const existingImagesStr = req.body.existing_images || "";
+        let finalImages = existingImagesStr ? existingImagesStr.split(',') : [];
+
+        // Add new uploads if any
         if (req.files && req.files.length > 0) {
-            plantData.image_path = req.files[0].path.replace(/\\/g, '/');
-            plantData.image_paths = JSON.stringify(req.files.map(f => f.path.replace(/\\/g, '/')));
+            const newImagePaths = req.files.map(f => f.path.replace(/\\/g, '/'));
+            finalImages = [...finalImages, ...newImagePaths];
+        }
+
+        // Only update image fields if there was a change in the gallery (new files OR existing_images was provided)
+        // Note: Flutter app always sends existing_images during edit save
+        if (req.body.existing_images !== undefined || (req.files && req.files.length > 0)) {
+            if (finalImages.length > 0) {
+                plantData.image_path = finalImages[0];
+                plantData.image_paths = JSON.stringify(finalImages);
+            } else {
+                // All images were removed
+                plantData.image_path = 'lib/assets/images/placeholder_green.png';
+                plantData.image_paths = '[]';
+            }
         }
 
         await Plant.update(req.params.id, plantData);
