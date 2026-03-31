@@ -2,15 +2,21 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Ensure upload directory exists
+// Ensure upload directories exist
 const uploadDir = 'upload/';
+const videoDir = 'upload/videos/';
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
+}
+if (!fs.existsSync(videoDir)) {
+    fs.mkdirSync(videoDir, { recursive: true });
 }
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, uploadDir);
+        const isVideo = file.mimetype.startsWith('video/') || 
+                       /mp4|mkv|mov|avi|wmv/.test(path.extname(file.originalname).toLowerCase());
+        cb(null, isVideo ? videoDir : uploadDir);
     },
     filename: (req, file, cb) => {
         cb(null, Date.now() + path.extname(file.originalname).toLowerCase());
@@ -19,19 +25,23 @@ const storage = multer.diskStorage({
 
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+    limits: { 
+        fileSize: 500 * 1024 * 1024 // Increased to 500MB to allow for HD videos
+    },
     fileFilter: (req, file, cb) => {
-        const filetypes = /jpeg|jpg|png|webp|heic|heif/;
-        const mimetypes = /image\/jpeg|image\/jpg|image\/png|image\/webp|image\/heic|image\/heif/;
+        const imageTypes = /jpeg|jpg|png|webp|heic|heif/;
+        const videoTypes = /mp4|mkv|mov|avi|wmv/;
         
-        const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
-        const mimetype = mimetypes.test(file.mimetype);
+        const isImage = imageTypes.test(path.extname(file.originalname).toLowerCase()) || 
+                       file.mimetype.startsWith('image/');
+        const isVideo = videoTypes.test(path.extname(file.originalname).toLowerCase()) || 
+                       file.mimetype.startsWith('video/');
 
-        if (mimetype || extname) {
+        if (isImage || isVideo) {
             return cb(null, true);
         }
         
-        cb(new Error('Only images are allowed (jpeg, jpg, png, webp)'));
+        cb(new Error('Only images and videos are allowed'));
     }
 });
 

@@ -17,16 +17,16 @@ class Plant {
     }
 
     static async create(plantData) {
-        const { name, image_path, category_id, description, height, width, flower_color, water_requirement, hedge_type, variety, shade, is_featured, image_paths } = plantData;
+        const { name, image_path, category_id, description, height, width, flower_color, water_requirement, hedge_type, variety, shade, is_featured, image_paths, video_path } = plantData;
         const result = await db.query(
-            'INSERT INTO plants (name, image_path, category_id, description, height, width, flower_color, water_requirement, hedge_type, variety, shade, is_featured, image_paths) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id',
-            [name, image_path, category_id, description, height, width, flower_color, water_requirement, hedge_type, variety, shade, is_featured, image_paths || '[]']
+            'INSERT INTO plants (name, image_path, category_id, description, height, width, flower_color, water_requirement, hedge_type, variety, shade, is_featured, image_paths, video_path) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id',
+            [name, image_path, category_id, description, height, width, flower_color, water_requirement, hedge_type, variety, shade, is_featured, image_paths || '[]', video_path || null]
         );
         return result.rows[0].id;
     }
 
     static async update(id, plantData) {
-        const { name, image_path, category_id, description, height, width, flower_color, water_requirement, hedge_type, variety, shade, is_featured, image_paths } = plantData;
+        const { name, image_path, category_id, description, height, width, flower_color, water_requirement, hedge_type, variety, shade, is_featured, image_paths, video_path } = plantData;
         
         // Build dynamic query to avoid overwriting with null/undefined
         let query = 'UPDATE plants SET name = $1, category_id = $2, description = $3, height = $4, width = $5, flower_color = $6, water_requirement = $7, hedge_type = $8, variety = $9, shade = $10, is_featured = $11';
@@ -41,6 +41,11 @@ class Plant {
         if (image_paths) {
             query += `, image_paths = $${count}`;
             params.push(image_paths);
+            count++;
+        }
+        if (video_path !== undefined) { // Check for undefined to allow setting to null if needed
+            query += `, video_path = $${count}`;
+            params.push(video_path);
             count++;
         }
 

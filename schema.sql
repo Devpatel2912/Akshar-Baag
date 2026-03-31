@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS plants (
     shade VARCHAR(100) DEFAULT 'Partial',
     is_featured BOOLEAN DEFAULT FALSE,
     image_paths JSONB DEFAULT '[]'::jsonb, -- Added for multiple images
+    video_path VARCHAR(255),               -- Added for plant videos
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
 );

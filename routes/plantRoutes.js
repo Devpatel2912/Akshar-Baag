@@ -7,10 +7,16 @@ router.get('/', plantController.getAllPlants);
 router.get('/:id', plantController.getPlantById);
 router.get('/category/:categoryName', plantController.getPlantsByCategory);
 
-router.post('/', upload.array('images', 10), plantController.createPlant);
+// Support multiple images and one video
+const plantUploads = upload.fields([
+    { name: 'images', maxCount: 10 },
+    { name: 'video', maxCount: 1 }
+]);
 
-// Support both JSON/Text and Images for updates
-router.put('/:id', upload.array('images', 10), plantController.updatePlant);
+router.post('/', plantUploads, plantController.createPlant);
+
+// Support both JSON/Text and Media for updates
+router.put('/:id', plantUploads, plantController.updatePlant);
 
 router.delete('/:id', plantController.deletePlant);
 

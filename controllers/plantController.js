@@ -1,4 +1,30 @@
 const Plant = require('../models/plantModel');
+const ffmpeg = require('fluent-ffmpeg');
+const ffprobePath = require('ffprobe-static').path;
+const fs = require('fs');
+
+ffmpeg.setFfprobePath(ffprobePath);
+
+// Helper to validate video duration and quality
+const validateVideo = (videoPath) => {
+    return new Promise((resolve, reject) => {
+        ffmpeg.ffprobe(videoPath, (err, metadata) => {
+            if (err) return reject(new Error('Failed to probe video file: ' + err.message));
+
+            const duration = metadata.format.duration; // in seconds
+            const videoStream = metadata.streams.find(s => s.codec_type === 'video');
+
+            if (!videoStream) return reject(new Error('No video stream found in the file'));
+
+            // Check duration (max 5 minutes = 300 seconds)
+            if (duration > 300) {
+                return reject(new Error(`Video duration (${Math.round(duration)}s) exceeds maximum limit of 5 minutes (300s)`));
+            }
+
+            resolve({ duration });
+        });
+    });
+};
 
 exports.getAllPlants = async (req, res) => {
     try {
@@ -35,17 +61,31 @@ exports.createPlant = async (req, res) => {
     try {
         console.log('--- Incoming createPlant ---');
         console.log('Body:', req.body);
-        console.log('Files count:', req.files ? req.files.length : 0);
+        
+        const images = req.files && req.files.images ? req.files.images : [];
+        const video = req.files && req.files.video ? req.files.video[0] : null;
 
         const plantData = { ...req.body };
 
-        if (req.files && req.files.length > 0) {
-            plantData.image_path = req.files[0].path.replace(/\\/g, '/');
-            plantData.image_paths = JSON.stringify(req.files.map(f => f.path.replace(/\\/g, '/')));
+        // Process Images
+        if (images.length > 0) {
+            plantData.image_path = images[0].path.replace(/\\/g, '/');
+            plantData.image_paths = JSON.stringify(images.map(f => f.path.replace(/\\/g, '/')));
         } else {
-            // Use placeholder for primary if no image
             plantData.image_path = 'lib/assets/images/placeholder_green.png';
             plantData.image_paths = '[]';
+        }
+
+        // Process and Validate Video
+        if (video) {
+            try {
+                await validateVideo(video.path);
+                plantData.video_path = video.path.replace(/\\/g, '/');
+            } catch (validationError) {
+                // Delete the uploaded file if validation fails
+                if (fs.existsSync(video.path)) fs.unlinkSync(video.path);
+                return res.status(400).json({ status: 'error', message: validationError.message });
+            }
         }
 
         const plantId = await Plant.create(plantData);
@@ -61,7 +101,9 @@ exports.updatePlant = async (req, res) => {
     try {
         console.log('--- Incoming updatePlant ---');
         console.log('ID:', req.params.id);
-        console.log('Body:', req.body);
+        
+        const images = req.files && req.files.images ? req.files.images : [];
+        const video = req.files && req.files.video ? req.files.video[0] : null;
 
         const plantData = { ...req.body };
 
@@ -69,23 +111,34 @@ exports.updatePlant = async (req, res) => {
         const existingImagesStr = req.body.existing_images || "";
         let finalImages = existingImagesStr ? existingImagesStr.split(',') : [];
 
-        // Add new uploads if any
-        if (req.files && req.files.length > 0) {
-            const newImagePaths = req.files.map(f => f.path.replace(/\\/g, '/'));
+        // Add new image uploads if any
+        if (images.length > 0) {
+            const newImagePaths = images.map(f => f.path.replace(/\\/g, '/'));
             finalImages = [...finalImages, ...newImagePaths];
         }
 
-        // Only update image fields if there was a change in the gallery (new files OR existing_images was provided)
-        // Note: Flutter app always sends existing_images during edit save
-        if (req.body.existing_images !== undefined || (req.files && req.files.length > 0)) {
+        // Only update image fields if changes occurred
+        if (req.body.existing_images !== undefined || images.length > 0) {
             if (finalImages.length > 0) {
                 plantData.image_path = finalImages[0];
                 plantData.image_paths = JSON.stringify(finalImages);
             } else {
-                // All images were removed
                 plantData.image_path = 'lib/assets/images/placeholder_green.png';
                 plantData.image_paths = '[]';
             }
+        }
+
+        // Process and Validate New Video if provided
+        if (video) {
+            try {
+                await validateVideo(video.path);
+                plantData.video_path = video.path.replace(/\\/g, '/');
+            } catch (validationError) {
+                if (fs.existsSync(video.path)) fs.unlinkSync(video.path);
+                return res.status(400).json({ status: 'error', message: validationError.message });
+            }
+        } else if (req.body.remove_video === 'true') {
+            plantData.video_path = null;
         }
 
         await Plant.update(req.params.id, plantData);
@@ -99,6 +152,7 @@ exports.updatePlant = async (req, res) => {
 
 exports.deletePlant = async (req, res) => {
     try {
+        // Optionally delete files from disk here if needed
         await Plant.delete(req.params.id);
         res.status(200).json({ status: 'success', message: 'Plant deleted' });
     } catch (error) {
