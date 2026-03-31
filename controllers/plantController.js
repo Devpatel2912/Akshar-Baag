@@ -5,10 +5,16 @@ const fs = require('fs');
 
 ffmpeg.setFfprobePath(ffprobePath);
 
-// Helper to validate video duration and quality
+// Helper to validate video duration
 const validateVideo = (videoPath) => {
     return new Promise((resolve, reject) => {
+        // Set a timeout of 30 seconds for ffprobe
+        const timeout = setTimeout(() => {
+            reject(new Error('Video validation timed out (ffprobe took too long)'));
+        }, 30000);
+
         ffmpeg.ffprobe(videoPath, (err, metadata) => {
+            clearTimeout(timeout);
             if (err) return reject(new Error('Failed to probe video file: ' + err.message));
 
             const duration = metadata.format.duration; // in seconds
@@ -60,8 +66,6 @@ exports.getPlantsByCategory = async (req, res) => {
 exports.createPlant = async (req, res) => {
     try {
         console.log('--- Incoming createPlant ---');
-        console.log('Body:', req.body);
-        
         const images = req.files && req.files.images ? req.files.images : [];
         const video = req.files && req.files.video ? req.files.video[0] : null;
 
@@ -69,6 +73,7 @@ exports.createPlant = async (req, res) => {
 
         // Process Images
         if (images.length > 0) {
+            console.log('Processing', images.length, 'images');
             plantData.image_path = images[0].path.replace(/\\/g, '/');
             plantData.image_paths = JSON.stringify(images.map(f => f.path.replace(/\\/g, '/')));
         } else {
@@ -78,21 +83,30 @@ exports.createPlant = async (req, res) => {
 
         // Process and Validate Video
         if (video) {
+            console.log('Validating video:', video.path);
             try {
-                await validateVideo(video.path);
-                plantData.video_path = video.path.replace(/\\/g, '/');
+                if (fs.existsSync(video.path)) {
+                    await validateVideo(video.path);
+                    plantData.video_path = video.path.replace(/\\/g, '/');
+                    console.log('Video validated successfully');
+                } else {
+                    console.error('Video file missing on disk:', video.path);
+                }
             } catch (validationError) {
-                // Delete the uploaded file if validation fails
+                console.error('Video validation failed:', validationError.message);
                 if (fs.existsSync(video.path)) fs.unlinkSync(video.path);
                 return res.status(400).json({ status: 'error', message: validationError.message });
             }
+        } else {
+            console.log('No video provided for this plant');
         }
 
+        console.log('Saving plant to database...');
         const plantId = await Plant.create(plantData);
-        console.log('Plant created successfully with ID:', plantId);
+        console.log('Plant saved successfully with ID:', plantId);
         res.status(201).json({ status: 'success', message: 'Plant created', plantId });
     } catch (error) {
-        console.error('Critical failure in createPlant:', error);
+        console.error('CRITICAL FAILURE in createPlant:', error);
         res.status(500).json({ status: 'error', message: error.message });
     }
 };
@@ -100,24 +114,21 @@ exports.createPlant = async (req, res) => {
 exports.updatePlant = async (req, res) => {
     try {
         console.log('--- Incoming updatePlant ---');
-        console.log('ID:', req.params.id);
-        
         const images = req.files && req.files.images ? req.files.images : [];
         const video = req.files && req.files.video ? req.files.video[0] : null;
 
         const plantData = { ...req.body };
 
-        // Handle image updates (New + Remaining Existing)
+        // Handle image updates
         const existingImagesStr = req.body.existing_images || "";
         let finalImages = existingImagesStr ? existingImagesStr.split(',') : [];
 
-        // Add new image uploads if any
         if (images.length > 0) {
+            console.log('Processing', images.length, 'new images');
             const newImagePaths = images.map(f => f.path.replace(/\\/g, '/'));
             finalImages = [...finalImages, ...newImagePaths];
         }
 
-        // Only update image fields if changes occurred
         if (req.body.existing_images !== undefined || images.length > 0) {
             if (finalImages.length > 0) {
                 plantData.image_path = finalImages[0];
@@ -128,24 +139,31 @@ exports.updatePlant = async (req, res) => {
             }
         }
 
-        // Process and Validate New Video if provided
+        // Process and Validate Video
         if (video) {
+            console.log('Validating new video:', video.path);
             try {
-                await validateVideo(video.path);
-                plantData.video_path = video.path.replace(/\\/g, '/');
+                if (fs.existsSync(video.path)) {
+                    await validateVideo(video.path);
+                    plantData.video_path = video.path.replace(/\\/g, '/');
+                    console.log('New video validated successfully');
+                }
             } catch (validationError) {
+                console.error('New video validation failed:', validationError.message);
                 if (fs.existsSync(video.path)) fs.unlinkSync(video.path);
                 return res.status(400).json({ status: 'error', message: validationError.message });
             }
         } else if (req.body.remove_video === 'true') {
+            console.log('Removing video path from plant');
             plantData.video_path = null;
         }
 
+        console.log('Updating plant in database...');
         await Plant.update(req.params.id, plantData);
         console.log('Plant updated successfully');
         res.status(200).json({ status: 'success', message: 'Plant updated' });
     } catch (error) {
-        console.error('Critical failure in updatePlant:', error);
+        console.error('CRITICAL FAILURE in updatePlant:', error);
         res.status(500).json({ status: 'error', message: error.message });
     }
 };
