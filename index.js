@@ -35,7 +35,7 @@ const server = app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
 
-// Increased timeout to 10 minutes for high-res image uploads
-server.timeout = 600000;
-server.keepAliveTimeout = 650000;
-server.headersTimeout = 660000;
+// Increased timeout to 20 minutes to allow for large video file uploads
+server.timeout = 1200000;
+server.keepAliveTimeout = 1250000; 
+server.headersTimeout = 1260000;

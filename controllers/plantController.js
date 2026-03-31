@@ -5,6 +5,16 @@ const fs = require('fs');
 
 ffmpeg.setFfprobePath(ffprobePath);
 
+// Fix EACCES (Permission Denied) on Linux/Mac if needed
+if (process.platform !== 'win32') {
+    try {
+        console.log('Ensuring ffprobe has execution permissions on this platform...');
+        fs.chmodSync(ffprobePath, 0o755);
+    } catch (err) {
+        console.error('Warning: Failed to set ffprobe permissions:', err.message);
+    }
+}
+
 // Helper to validate video duration
 const validateVideo = (videoPath) => {
     return new Promise((resolve, reject) => {
@@ -66,6 +76,9 @@ exports.getPlantsByCategory = async (req, res) => {
 exports.createPlant = async (req, res) => {
     try {
         console.log('--- Incoming createPlant ---');
+        console.log('Body:', req.body);
+        console.log('Files:', req.files ? Object.keys(req.files) : 'none');
+
         const images = req.files && req.files.images ? req.files.images : [];
         const video = req.files && req.files.video ? req.files.video[0] : null;
 
@@ -77,37 +90,42 @@ exports.createPlant = async (req, res) => {
             plantData.image_path = images[0].path.replace(/\\/g, '/');
             plantData.image_paths = JSON.stringify(images.map(f => f.path.replace(/\\/g, '/')));
         } else {
+            console.log('No new images provided, using placeholder');
             plantData.image_path = 'lib/assets/images/placeholder_green.png';
             plantData.image_paths = '[]';
         }
 
         // Process and Validate Video
         if (video) {
-            console.log('Validating video:', video.path);
+            console.log('Validating video from path:', video.path);
             try {
                 if (fs.existsSync(video.path)) {
                     await validateVideo(video.path);
                     plantData.video_path = video.path.replace(/\\/g, '/');
-                    console.log('Video validated successfully');
+                    console.log('Video validation PASSED');
                 } else {
-                    console.error('Video file missing on disk:', video.path);
+                    console.error('CRITICAL: Video file missing from disk immediately after upload:', video.path);
                 }
             } catch (validationError) {
-                console.error('Video validation failed:', validationError.message);
-                if (fs.existsSync(video.path)) fs.unlinkSync(video.path);
-                return res.status(400).json({ status: 'error', message: validationError.message });
+                console.error('Video validation FAILED:', validationError.message);
+                if (fs.existsSync(video.path)) {
+                    try { fs.unlinkSync(video.path); } catch (e) { console.error('Failed to delete invalid video:', e.message); }
+                }
+                return res.status(400).json({ status: 'error', message: `Video Error: ${validationError.message}` });
             }
         } else {
-            console.log('No video provided for this plant');
+            console.log('No video provided for this plant entry');
         }
 
-        console.log('Saving plant to database...');
+        console.log('Persisting plant to database...');
         const plantId = await Plant.create(plantData);
-        console.log('Plant saved successfully with ID:', plantId);
-        res.status(201).json({ status: 'success', message: 'Plant created', plantId });
+        console.log('Plant persistence successful, ID:', plantId);
+        res.status(201).json({ status: 'success', message: 'Plant created successfully', plantId });
     } catch (error) {
-        console.error('CRITICAL FAILURE in createPlant:', error);
+        console.error('CRITICAL ERROR in createPlant flow:', error);
         res.status(500).json({ status: 'error', message: error.message });
+    } finally {
+        console.log('--- createPlant REQUEST PROCESSING COMPLETED ---');
     }
 };
 
