@@ -5,18 +5,31 @@ const fs = require('fs');
 // Ensure upload directories exist
 const uploadDir = 'upload/';
 const videoDir = 'upload/videos/';
+const noteImageDir = 'upload/notesimage/';
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
 }
 if (!fs.existsSync(videoDir)) {
     fs.mkdirSync(videoDir, { recursive: true });
 }
+if (!fs.existsSync(noteImageDir)) {
+    fs.mkdirSync(noteImageDir, { recursive: true });
+}
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         const isVideo = file.mimetype.startsWith('video/') || 
                        /mp4|mkv|mov|avi|wmv/.test(path.extname(file.originalname).toLowerCase());
-        cb(null, isVideo ? videoDir : uploadDir);
+        
+        const isNote = req.baseUrl.includes('notes') || req.originalUrl.includes('notes');
+
+        if (isVideo) {
+            cb(null, videoDir);
+        } else if (isNote) {
+            cb(null, noteImageDir);
+        } else {
+            cb(null, uploadDir);
+        }
     },
     filename: (req, file, cb) => {
         cb(null, Date.now() + path.extname(file.originalname).toLowerCase());

@@ -36,6 +36,19 @@ CREATE TABLE IF NOT EXISTS plants (
     CONSTRAINT fk_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
 );
 
+-- Notes Table
+CREATE TABLE IF NOT EXISTS notes (
+    id VARCHAR(50) PRIMARY KEY,
+    title VARCHAR(255),
+    content TEXT,
+    blocks JSONB DEFAULT '[]'::jsonb,
+    date_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    color_value BIGINT,
+    category VARCHAR(255),
+    image_size VARCHAR(50) DEFAULT 'large',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Insert Default Categories
 INSERT INTO categories (name) VALUES 
 ('Indoor Plants'),

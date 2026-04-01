@@ -6,6 +6,7 @@ const dotenv = require('dotenv');
 const plantRoutes = require('./routes/plantRoutes');
 const userRoutes = require('./routes/userRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
+const noteRoutes = require('./routes/noteRoutes');
 
 dotenv.config();
 
@@ -25,6 +26,7 @@ app.use('/upload', express.static(path.join(__dirname, 'upload')));
 app.use('/api/plants', plantRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/notes', noteRoutes);
 
 // Basic health check
 app.get('/', (req, res) => {
