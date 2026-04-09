@@ -80,7 +80,7 @@ exports.createPlant = async (req, res) => {
         console.log('Files:', req.files ? Object.keys(req.files) : 'none');
 
         const images = req.files && req.files.images ? req.files.images : [];
-        const video = req.files && req.files.video ? req.files.video[0] : null;
+        const videos = req.files && req.files.video ? req.files.video : [];
 
         const plantData = { ...req.body };
 
@@ -95,26 +95,33 @@ exports.createPlant = async (req, res) => {
             plantData.image_paths = '[]';
         }
 
-        // Process and Validate Video
-        if (video) {
-            console.log('Validating video from path:', video.path);
-            try {
-                if (fs.existsSync(video.path)) {
-                    await validateVideo(video.path);
-                    plantData.video_path = video.path.replace(/\\/g, '/');
-                    console.log('Video validation PASSED');
-                } else {
-                    console.error('CRITICAL: Video file missing from disk immediately after upload:', video.path);
+        // Process and Validate Videos
+        if (videos.length > 0) {
+            console.log('Processing and validating', videos.length, 'videos');
+            const validVideoPaths = [];
+            for (const v of videos) {
+                try {
+                    if (fs.existsSync(v.path)) {
+                        await validateVideo(v.path);
+                        validVideoPaths.push(v.path.replace(/\\/g, '/'));
+                        console.log('Video validated:', v.path);
+                    }
+                } catch (validationError) {
+                    console.error('Video validation failed for', v.path, ':', validationError.message);
+                    // Cleanup uploaded files on failure
+                    for (const file of videos) {
+                        if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+                    }
+                    return res.status(400).json({ status: 'error', message: `Video Error: ${validationError.message}` });
                 }
-            } catch (validationError) {
-                console.error('Video validation FAILED:', validationError.message);
-                if (fs.existsSync(video.path)) {
-                    try { fs.unlinkSync(video.path); } catch (e) { console.error('Failed to delete invalid video:', e.message); }
-                }
-                return res.status(400).json({ status: 'error', message: `Video Error: ${validationError.message}` });
+            }
+            if (validVideoPaths.length > 0) {
+                plantData.video_path = validVideoPaths[0];
+                plantData.video_paths = JSON.stringify(validVideoPaths);
             }
         } else {
             console.log('No video provided for this plant entry');
+            plantData.video_paths = '[]';
         }
 
         console.log('Persisting plant to database...');
@@ -133,7 +140,7 @@ exports.updatePlant = async (req, res) => {
     try {
         console.log('--- Incoming updatePlant ---');
         const images = req.files && req.files.images ? req.files.images : [];
-        const video = req.files && req.files.video ? req.files.video[0] : null;
+        const videos = req.files && req.files.video ? req.files.video : [];
 
         const plantData = { ...req.body };
 
@@ -157,23 +164,43 @@ exports.updatePlant = async (req, res) => {
             }
         }
 
-        // Process and Validate Video
-        if (video) {
-            console.log('Validating new video:', video.path);
-            try {
-                if (fs.existsSync(video.path)) {
-                    await validateVideo(video.path);
-                    plantData.video_path = video.path.replace(/\\/g, '/');
-                    console.log('New video validated successfully');
+        // Handle video updates
+        const existingVideosStr = req.body.existing_videos || "";
+        let finalVideos = existingVideosStr ? existingVideosStr.split(',') : [];
+
+        // Process and Validate New Videos
+        if (videos.length > 0) {
+            console.log('Validating', videos.length, 'new videos');
+            const newVideoPaths = [];
+            for (const v of videos) {
+                try {
+                    if (fs.existsSync(v.path)) {
+                        await validateVideo(v.path);
+                        newVideoPaths.push(v.path.replace(/\\/g, '/'));
+                    }
+                } catch (validationError) {
+                    console.error('New video validation failed:', validationError.message);
+                    for (const file of videos) {
+                        if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+                    }
+                    return res.status(400).json({ status: 'error', message: validationError.message });
                 }
-            } catch (validationError) {
-                console.error('New video validation failed:', validationError.message);
-                if (fs.existsSync(video.path)) fs.unlinkSync(video.path);
-                return res.status(400).json({ status: 'error', message: validationError.message });
+            }
+            finalVideos = [...finalVideos, ...newVideoPaths];
+        }
+
+        if (req.body.existing_videos !== undefined || videos.length > 0) {
+            if (finalVideos.length > 0) {
+                plantData.video_path = finalVideos[0];
+                plantData.video_paths = JSON.stringify(finalVideos);
+            } else {
+                plantData.video_path = null;
+                plantData.video_paths = '[]';
             }
         } else if (req.body.remove_video === 'true') {
             console.log('Removing video path from plant');
             plantData.video_path = null;
+            plantData.video_paths = '[]';
         }
 
         console.log('Updating plant in database...');

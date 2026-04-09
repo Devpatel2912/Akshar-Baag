@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
+    role VARCHAR(50) DEFAULT 'viewer',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -25,6 +26,7 @@ CREATE TABLE IF NOT EXISTS plants (
     height VARCHAR(100),
     width VARCHAR(100),
     flower_color VARCHAR(100) DEFAULT 'Unknown',
+    flower_type VARCHAR(100) DEFAULT 'Flowering',
     water_requirement VARCHAR(100) DEFAULT 'Medium',
     hedge_type VARCHAR(100) DEFAULT 'Screening',
     variety VARCHAR(100) DEFAULT 'Common',

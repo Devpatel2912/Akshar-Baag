@@ -10,7 +10,7 @@ router.get('/category/:categoryName', plantController.getPlantsByCategory);
 // Support multiple images and one video
 const plantUploads = upload.fields([
     { name: 'images', maxCount: 10 },
-    { name: 'video', maxCount: 1 }
+    { name: 'video', maxCount: 5 }
 ]);
 
 router.post('/', plantUploads, plantController.createPlant);
